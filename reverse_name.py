@@ -10,6 +10,16 @@
 ##############################################################################
 ### OPTIONS                                                                ###
 
+# Also rename Directory (yes, no).
+#
+# Note: Only used if only one videofile is found in the Directory.
+#rename_dir=no
+
+# comma separeted list of video extentions that are used for the Option 
+# Rename Dirname to determine if there is more then one videofile
+#
+#video_ext=.mkv,.avi,.mp4,.wmv
+
 ### NZBGET POST-PROCESSING SCRIPT                                          ###
 ##############################################################################
 
@@ -86,12 +96,27 @@ if os.environ.has_key('NZBOP_SCRIPTDIR') and not os.environ['NZBOP_VERSION'][0:5
 
     # All checks done, now launching the script.
 
+    try:
+        rename_dir=os.environ['NZBPO_RENAME_DIR'] == 'yes'
+    except:
+        rename_dir=False
+
     rd = False
+    videos = 0
+    new_dirname = None
+    try:
+        videoExtensions = os.environ['NZBPO_VIDEO_EXT'].split(',')
+    except:
+        videoExtensions = ".mkv,.avi,.mp4,.wmv"
+
     for dirpath, dirnames, filenames in os.walk(os.environ['NZBPP_DIRECTORY']):
         for file in filenames:
 
             filePath = os.path.join(dirpath, file)
             fileName, fileExtension = os.path.splitext(file)
+
+            if fileExtension in videoExtensions:
+                videos += 1
 
             if reverse_pattern.search(fileName) is not None:
                 na_parts = season_pattern.search(fileName)
@@ -111,11 +136,22 @@ if os.environ.has_key('NZBOP_SCRIPTDIR') and not os.environ['NZBOP_VERSION'][0:5
                 try:
                     os.rename(filePath, os.path.join(dirpath, new_filename + fileExtension))
                     rd = True
+                    if videos == 1:
+                        new_dirname = os.path.join(os.path.dirname(os.environ['NZBPP_DIRECTORY']), new_filename)
                 except Exception,e:
                     print "[INFO] " + str(e)
-                    print "[INFO] Error: unable to rename file", file
+                    print "[INFO] Error: unable to rename file ", file
                     pass
+
     if rd:
+        if rename_dir and (videos == 1) and new_dirname is not None:
+            print "[INFO] changing Dirname from: ", os.environ['NZBPP_DIRECTORY'], " to ", new_dirname
+            try:
+                os.rename(os.environ['NZBPP_DIRECTORY'], new_dirname)
+            except Exception,e:
+                print "[INFO] " + str(e)
+                print "[INFO] Error: unable to rename directory ", os.environ['NZBPP_DIRECTORY'], " to ", new_dirname
+                pass
         sys.exit(POSTPROCESS_SUCCESS)
     else:
         sys.exit(POSTPROCESS_NONE)
