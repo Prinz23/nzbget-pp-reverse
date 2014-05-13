@@ -17,7 +17,7 @@ import os
 import sys
 import re
 
-reverse_list = [r"\.\d{2}e\d{2}s\.", r"\.[pi]0801\.", r"\.p027\.", r"\b[45]62[xh]\.", r"\.yarulb\.", r"\.vtdh\.", r"\.ld[.-]?bew\.", r"\.pir[dvd|bew|db|rb]\."]
+reverse_list = [r"\.\d{2}e\d{2}s\.", r"\.[pi]0801\.", r"\.p027\.", r"\b[45]62[xh]\.", r"\.yarulb\.", r"\.vtdh\.", r"\.ld[.-]?bew\.", r"\.pir.?(dvd|bew|db|rb)\."]
 reverse_pattern = re.compile('|'.join(reverse_list), flags=re.IGNORECASE)
 season_pattern = re.compile(r"(.*\.\d{2}e\d{2}s\.)(.*)", flags=re.IGNORECASE)
 word_pattern = re.compile(r"([^A-Z0-9]*[A-Z0-9]+)")
