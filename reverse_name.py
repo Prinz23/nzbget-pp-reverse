@@ -17,7 +17,7 @@ import os
 import sys
 import re
 
-reverse_list = [r"\.\d{2}e\d{2}s\.", r"\.[pi]0801\.", r"\.p027\.", r"\.p084\.", r"\.p063\.", r"\b[45]62[xh]\.", r"\.yarulb\.", r"\.vtd[hp]\.", r"\.ld[.-]?bew\.", 
+reverse_list = [r"\.\d{2}e\d{2}s\.", r"\.[pi]0801\.", r"\.p027\.", r"\.[pi]675\.", r"\.[pi]084\.", r"\.p063\.", r"\b[45]62[xh]\.", r"\.yarulb\.", r"\.vtd[hp]\.", r"\.ld[.-]?bew\.", 
                 r"\.pir.?(shv|dov|dvd|bew|db|rb)\.", r"\brdvd\.", r"\.vts\.", r"\.reneercs\.", r"\.dcv\.", r"\b(pir|mac)dh\b", r"\.reporp\.", r"\.kcaper\.", r"\.lanretni\.", 
                 r"\b3ca\b", r"\bcaa\b", r"\b3pm\b", r"\.cstn\.", r"\.5r\.", r"\brcs\b"]
 reverse_pattern = re.compile('|'.join(reverse_list), flags=re.IGNORECASE)
@@ -25,6 +25,12 @@ season_pattern = re.compile(r"(.*\.\d{2}e\d{2}s\.)(.*)", flags=re.IGNORECASE)
 word_pattern = re.compile(r"([^A-Z0-9]*[A-Z0-9]+)")
 char_replace = [[r"(\w)1\.(\w)",r"\1i\2"]
 ]
+garbage_name = re.compile(r"^[a-zA-Z0-9]{5,}$")
+media_list = [r"\.s\d{2}e\d{2}\.", r"\.1080[pi]\.", r"\.720p\.", r"\.576[pi]\.", r"\.480[pi]\.", r"\.360p\.", r"\.[xh]26[45]\b", r"\.bluray\.", r"\.[hp]dtv\.", r"\.web[.-]?dl\.",
+              r"\.(vhs|vod|dvd|web|bd|br).?rip\.", r"\.dvdr\b", r"\.stv\.", r"\.screener\.", r"\.vcd\.", r"\bhd(cam|rip)\b", r"\.proper\.", r"\.repack\.", r"\.internal\.",
+              r"\bac3\b", r"\baac\b", r"\bmp3\b", r"\.ntsc\.", r"\.pal\.", r"\.secam\.", r"\bdivx\b", r"\bxvid\b", r"\.r5\.", r"\.scr\."]
+media_pattern = re.compile('|'.join(media_list), flags=re.IGNORECASE)
+media_extentions = [".mkv", ".mp4", ".avi", ".wmv"]
 
 # NZBGet V11+
 # Check if the script is called from nzbget 11.0 or later
@@ -89,11 +95,15 @@ if os.environ.has_key('NZBOP_SCRIPTDIR') and not os.environ['NZBOP_VERSION'][0:5
     # All checks done, now launching the script.
 
     rd = False
+    videos = 0
+    old_name = None
+    new_name = None
     for dirpath, dirnames, filenames in os.walk(os.environ['NZBPP_DIRECTORY']):
         for file in filenames:
 
             filePath = os.path.join(dirpath, file)
             fileName, fileExtension = os.path.splitext(file)
+            dirname = os.path.dirname(filePath)
 
             if reverse_pattern.search(fileName) is not None:
                 na_parts = season_pattern.search(fileName)
@@ -115,8 +125,23 @@ if os.environ.has_key('NZBOP_SCRIPTDIR') and not os.environ['NZBOP_VERSION'][0:5
                     rd = True
                 except Exception,e:
                     print "[INFO] " + str(e)
-                    print "[INFO] Error: unable to rename file", file
+                    print "[INFO] Error: unable to rename file ", file
                     pass
+            elif (fileExtension.lower() in media_extentions) and (garbage_name.search(fileName) is not None) and (media_pattern.search(os.path.basename(dirname)) is not None):
+                videos += 1
+                old_name = filePath
+                new_name = os.path.join(dirname, os.path.basename(dirname) + fileExtension)
+
+    if not rd and videos == 1 and old_name is not None and new_name is not None:
+        print "[INFO] renaming the File " + os.path.basename(old_name) + " to the Dirname " + os.path.basename(os.path.dirname(new_name))
+        try:
+            os.rename(old_name, new_name)
+            rd = True
+        except Exception,e:
+            print "[INFO] " + str(e)
+            print "[INFO] Error unable to rename file ", old_name
+            pass
+
     if rd:
         sys.exit(POSTPROCESS_SUCCESS)
     else:
