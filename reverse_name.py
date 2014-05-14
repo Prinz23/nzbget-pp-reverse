@@ -17,7 +17,9 @@ import os
 import sys
 import re
 
-reverse_list = [r"\.\d{2}e\d{2}s\.", r"\.[pi]0801\.", r"\.p027\.", r"\b[45]62[xh]\.", r"\.yarulb\.", r"\.vtdh\.", r"\.ld[.-]?bew\.", r"\.pir.?(dvd|bew|db|rb)\."]
+reverse_list = [r"\.\d{2}e\d{2}s\.", r"\.[pi]0801\.", r"\.p027\.", r"\.p084\.", r"\.p063\.", r"\b[45]62[xh]\.", r"\.yarulb\.", r"\.vtd[hp]\.", r"\.ld[.-]?bew\.", 
+                r"\.pir.?(dov|dvd|bew|db|rb)\.", r"\brdvd\.", r"\.vts\.", r"\.reneercs\.", r"\.dcv\.", r"\b(pir|mac)dh\b", r"\.reporp\.", r"\.kcaper\.", r"\.lanretni\.", 
+                r"\b3ca\b", r"\.cstn\."]
 reverse_pattern = re.compile('|'.join(reverse_list), flags=re.IGNORECASE)
 season_pattern = re.compile(r"(.*\.\d{2}e\d{2}s\.)(.*)", flags=re.IGNORECASE)
 word_pattern = re.compile(r"([^A-Z0-9]*[A-Z0-9]+)")
@@ -106,7 +108,7 @@ if os.environ.has_key('NZBOP_SCRIPTDIR') and not os.environ['NZBOP_VERSION'][0:5
                         new_words = re.sub(cr[0],cr[1],new_words)
                     new_filename = new_words[::-1] + na_parts.group(1)[::-1]
                 else:
-                    new_filename = fileName[::-1].title()
+                    new_filename = fileName[::-1]
                 print "[INFO] reversing filename from: ", fileName, " to ", new_filename 
                 try:
                     os.rename(filePath, os.path.join(dirpath, new_filename + fileExtension))
