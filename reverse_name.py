@@ -55,7 +55,23 @@ if os.name == 'nt':
 
     evn = win_eviron()
 else:
-    evn = os.environ
+    class LinuxEnv(object):
+        def __init__(self, environ):
+            self.environ = environ
+
+        def __getitem__(self, key):
+            v = self.environ.get(key)
+            try:
+                return v.decode(SYS_ENCODING) if isinstance(v, str) else v
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                return v
+
+        def get(self, key, default=None):
+            v = self[key]
+            return v if v is not None else default
+
+    evn = LinuxEnv(os.environ)
+
 
 SYS_ENCODING = None
 
@@ -104,7 +120,7 @@ class ek:
         if os.name == 'nt':
             result = func(*args, **kwargs)
         else:
-            result = func(*[ek.callPeopleStupid(x) if type(x) in (str, unicode) else x for x in args], **kwargs)
+            result = func(*[ek.callPeopleStupid(x) if type(x) == str else x for x in args], **kwargs)
 
         if type(result) in (list, tuple):
             return ek.fixListEncodings(result)
