@@ -19,41 +19,46 @@ import re
 import locale
 
 reverse_list = [r"\.\d{2}e\d{2}s\.", r"\.p0612\.", r"\.[pi]0801\.", r"\.p027\.", r"\.[pi]675\.", r"\.[pi]084\.", r"\.p063\.", r"\b[45]62[xh]\.", r"\.yarulb\.", r"\.vtd[hp]\.",
-                r"\.ld[.-]?bew\.", r"\.pir.?(shv|dov|dvd|bew|db|rb)\.", r"\brdvd\.", r"\.vts\.", r"\.reneercs\.", r"\.dcv\.", r"\b(pir|mac)dh\b", r"\.reporp\.", r"\.kcaper\.",
+                r'\.(?:ld[.-]?)?bew\.', r"\.pir.?(shv|dov|bew|dvd|db|rb)\.", r"\brdvd\.", r"\.vts\.", r"\.reneercs\.", r"\.dcv\.", r"\b(pir|mac)dh\b", r"\.reporp\.", r"\.kcaper\.",
                 r"\.lanretni\.", r"\b3ca\b", r"\bcaa\b", r"\b3pm\b", r"\.cstn\.", r"\.5r\.", r"\brcs\b"]
 reverse_pattern = re.compile('|'.join(reverse_list), flags=re.IGNORECASE)
 season_pattern = re.compile(r"(.*\.\d{2}e\d{2}s\.)(.*)", flags=re.IGNORECASE)
 word_pattern = re.compile(r"([^A-Z0-9]*[A-Z0-9]+)")
 char_replace = [[r"(\w)1\.(\w)",r"\1i\2"]
 ]
-garbage_name = re.compile(r"^[a-zA-Z0-9]{3,}$")
+garbage_name = re.compile(r"^[a-zA-Z0-9]{2,}$")
 media_list = [r"\.s\d{2}e\d{2}\.", r"\.2160p\.", r"\.1080[pi]\.", r"\.720p\.", r"\.576[pi]\.", r"\.480[pi]\.", r"\.360p\.", r"\.[xh]26[45]\b", r"\.bluray\.", r"\.[hp]dtv\.",
-              r"\.web[.-]?dl\.", r"\.(vhs|vod|dvd|web|bd|br).?rip\.", r"\.dvdr\b", r"\.stv\.", r"\.screener\.", r"\.vcd\.", r"\bhd(cam|rip)\b", r"\.proper\.", r"\.repack\.",
+              r'\.web(?:[.-]?dl)?\.', r"\.(vhs|vod|dvd|web|bd|br).?rip\.", r"\.dvdr\b", r"\.stv\.", r"\.screener\.", r"\.vcd\.", r"\bhd(cam|rip)\b", r"\.proper\.", r"\.repack\.",
               r"\.internal\.", r"\bac3\b", r"\baac\b", r"\bmp3\b", r"\.ntsc\.", r"\.pal\.", r"\.secam\.", r"\bdivx\b", r"\bxvid\b", r"\.r5\.", r"\.scr\."]
 media_pattern = re.compile('|'.join(media_list), flags=re.IGNORECASE)
 media_extentions = [".mkv", ".mp4", ".avi", ".wmv", ".divx", ".xvid"]
 
-if os.name == 'nt':
+if 'nt' == os.name:
     import ctypes
 
-    class win_eviron:
-        def getEnvironmentVariable(self, name):
-            name= unicode(name) # make sure string argument is unicode
+    class WinEnv:
+        def __init__(self):
+            pass
+
+        @staticmethod
+        def get_environment_variable(name):
+            name = unicode(name)  # ensures string argument is unicode
             n = ctypes.windll.kernel32.GetEnvironmentVariableW(name, None, 0)
-            if n == 0:
-                return None
-            buf = ctypes.create_unicode_buffer(u'\0'*n)
-            ctypes.windll.kernel32.GetEnvironmentVariableW(name, buf, n)
-            return buf.value
+            env_value = None
+            if n:
+                buf = ctypes.create_unicode_buffer(u'\0'*n)
+                ctypes.windll.kernel32.GetEnvironmentVariableW(name, buf, n)
+                env_value = buf.value
+            return env_value
 
         def __getitem__(self, key):
-            return self.getEnvironmentVariable(key)
+            return self.get_environment_variable(key)
 
         def get(self, key, default=None):
-            r = self.getEnvironmentVariable(key)
-            return r if r else default
+            r = self.get_environment_variable(key)
+            return r if r is not None else default
 
-    evn = win_eviron()
+    evn = WinEnv()
 else:
     class LinuxEnv(object):
         def __init__(self, environ):
@@ -72,7 +77,6 @@ else:
 
     evn = LinuxEnv(os.environ)
 
-
 SYS_ENCODING = None
 
 try:
@@ -85,49 +89,68 @@ except (locale.Error, IOError):
     pass
 
 if not SYS_ENCODING or SYS_ENCODING in ('ANSI_X3.4-1968', 'US-ASCII', 'ASCII'):
-            SYS_ENCODING = 'UTF-8'
+    SYS_ENCODING = 'UTF-8'
 
 
 class ek:
+    def __init__(self):
+        pass
+
     @staticmethod
-    def fixStupidEncodings(x, silent=False):
-        if type(x) == str:
+    def fix_string_encoding(x):
+        if str == type(x):
             try:
                 return x.decode(SYS_ENCODING)
             except UnicodeDecodeError:
                 return None
-        elif type(x) == unicode:
+        elif unicode == type(x):
             return x
-        else:
-            return None
+        return None
 
     @staticmethod
-    def fixListEncodings(x):
-        if type(x) != list and type(x) != tuple:
-            return x
-        else:
-            return filter(lambda x: x != None, map(ek.fixStupidEncodings, x))
+    def fix_out_encoding(x):
+        if isinstance(x, basestring):
+            return ek.fix_string_encoding(x)
+        return x
 
     @staticmethod
-    def callPeopleStupid(x):
+    def fix_list_encoding(x):
+        if type(x) not in (list, tuple):
+            return x
+        return filter(lambda i: None is not i, map(ek.fix_out_encoding, x))
+
+    @staticmethod
+    def encode_item(x):
         try:
             return x.encode(SYS_ENCODING)
         except UnicodeEncodeError:
             return x.encode(SYS_ENCODING, 'ignore')
 
     @staticmethod
-    def ek(func, *args, **kwargs):
-        if os.name == 'nt':
-            result = func(*args, **kwargs)
-        else:
-            result = func(*[ek.callPeopleStupid(x) if type(x) == str else x for x in args], **kwargs)
+    def win_encode_unicode(x):
+        if isinstance(x, str):
+            try:
+                return x.decode('UTF-8')
+            except UnicodeDecodeError:
+                return x
+        return x
 
-        if type(result) in (list, tuple):
-            return ek.fixListEncodings(result)
-        elif type(result) == str:
-            return ek.fixStupidEncodings(result)
+    @staticmethod
+    def ek(func, *args, **kwargs):
+        if 'nt' == os.name:
+            # convert all str parameter values to unicode
+            args = tuple([x if not isinstance(x, str) else ek.win_encode_unicode(x) for x in args])
+            kwargs = {k: x if not isinstance(x, str) else ek.win_encode_unicode(x) for k, x in
+                      kwargs.iteritems()}
+            func_result = func(*args, **kwargs)
         else:
-            return result
+            func_result = func(*[ek.encode_item(x) if type(x) == str else x for x in args], **kwargs)
+
+        if type(func_result) in (list, tuple):
+            return ek.fix_list_encoding(func_result)
+        elif str == type(func_result):
+            return ek.fix_string_encoding(func_result)
+        return func_result
 
 
 class logger:
@@ -154,6 +177,8 @@ nzbget_version = tryInt(nzbget_version[:nzbget_version.find(".")])
 if nzbget_version >= 11:
     logger.log("Script triggered from NZBGet (11.0 or later).")
 
+    # NZBGet argv: all passed as environment variables.
+    clientAgent = "nzbget"
     # Exit codes used by NZBGet
     POSTPROCESS_PARCHECK=92
     POSTPROCESS_SUCCESS=93
