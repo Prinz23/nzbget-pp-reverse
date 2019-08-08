@@ -92,7 +92,7 @@ if not SYS_ENCODING or SYS_ENCODING in ('ANSI_X3.4-1968', 'US-ASCII', 'ASCII'):
     SYS_ENCODING = 'UTF-8'
 
 
-class ek:
+class Ek:
     def __init__(self):
         pass
 
@@ -110,14 +110,14 @@ class ek:
     @staticmethod
     def fix_out_encoding(x):
         if isinstance(x, basestring):
-            return ek.fix_string_encoding(x)
+            return Ek.fix_string_encoding(x)
         return x
 
     @staticmethod
     def fix_list_encoding(x):
         if type(x) not in (list, tuple):
             return x
-        return filter(lambda i: None is not i, map(ek.fix_out_encoding, x))
+        return filter(lambda i: None is not i, map(Ek.fix_out_encoding, x))
 
     @staticmethod
     def encode_item(x):
@@ -139,29 +139,49 @@ class ek:
     def ek(func, *args, **kwargs):
         if 'nt' == os.name:
             # convert all str parameter values to unicode
-            args = tuple([x if not isinstance(x, str) else ek.win_encode_unicode(x) for x in args])
-            kwargs = {k: x if not isinstance(x, str) else ek.win_encode_unicode(x) for k, x in
+            args = tuple([x if not isinstance(x, str) else Ek.win_encode_unicode(x) for x in args])
+            kwargs = {k: x if not isinstance(x, str) else Ek.win_encode_unicode(x) for k, x in
                       kwargs.iteritems()}
             func_result = func(*args, **kwargs)
         else:
-            func_result = func(*[ek.encode_item(x) if type(x) == str else x for x in args], **kwargs)
+            func_result = func(*[Ek.encode_item(x) if type(x) == str else x for x in args], **kwargs)
 
         if type(func_result) in (list, tuple):
-            return ek.fix_list_encoding(func_result)
+            return Ek.fix_list_encoding(func_result)
         elif str == type(func_result):
-            return ek.fix_string_encoding(func_result)
+            return Ek.fix_string_encoding(func_result)
         return func_result
 
 
-class logger:
-    INFO = 'INFO'
-    DETAIL = 'DETAIL'
-    ERROR = 'ERROR'
-    WARNING = 'WARNING'
+class Logger:
+    INFO, DETAIL, ERROR, WARNING = 'INFO', 'DETAIL', 'ERROR', 'WARNING'
+    # '[NZB]' send a command message to NZBGet (no log)
+    NZB = 'NZB'
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def safe_print(msg_type, message):
+        try:
+            print '[%s] %s' % (msg_type, message.encode(SYS_ENCODING))
+        except (StandardError, Exception):
+            try:
+                print '[%s] %s' % (msg_type, message)
+            except (StandardError, Exception):
+                try:
+                    print '[%s] %s' % (msg_type, repr(message))
+                except (StandardError, Exception):
+                    pass
 
     @staticmethod
     def log(message, msg_type=INFO):
-        print('[%s] %s' % (msg_type, message))
+        size = 900
+        if size > len(message):
+            Logger.safe_print(msg_type, message)
+        else:
+            for group in (message[pos:pos + size] for pos in xrange(0, len(message), size)):
+                Logger.safe_print(msg_type, group)
 
 
 def tryInt(s, s_default=0):
@@ -175,7 +195,7 @@ def tryInt(s, s_default=0):
 nzbget_version = evn.get('NZBOP_VERSION', '0.1')
 nzbget_version = tryInt(nzbget_version[:nzbget_version.find(".")])
 if nzbget_version >= 11:
-    logger.log("Script triggered from NZBGet (11.0 or later).")
+    Logger.log("Script triggered from NZBGet (11.0 or later).")
 
     # NZBGet argv: all passed as environment variables.
     clientAgent = "nzbget"
@@ -189,18 +209,18 @@ if nzbget_version >= 11:
     status = 0
 
     if evn['NZBOP_UNPACK'] != 'yes':
-        logger.log("Please enable option \"Unpack\" in nzbget configuration file, exiting")
+        Logger.log("Please enable option \"Unpack\" in nzbget configuration file, exiting")
         sys.exit(POSTPROCESS_NONE)
 
     parstatus = evn['NZBPP_PARSTATUS']
 
     # Check par status
     if parstatus == '3':
-        logger.log("Par-check successful, but Par-repair disabled, exiting")
+        Logger.log("Par-check successful, but Par-repair disabled, exiting")
         sys.exit(POSTPROCESS_NONE)
 
     if parstatus == '1':
-        logger.log("Par-check failed, setting status \"failed\"")
+        Logger.log("Par-check failed, setting status \"failed\"")
         status = 1
         sys.exit(POSTPROCESS_NONE)
 
@@ -208,7 +228,7 @@ if nzbget_version >= 11:
 
     # Check unpack status
     if unpackstatus == '1':
-        logger.log("Unpack failed, setting status \"failed\"")
+        Logger.log("Unpack failed, setting status \"failed\"")
         status = 1
         sys.exit(POSTPROCESS_NONE)
 
@@ -217,25 +237,25 @@ if nzbget_version >= 11:
     if unpackstatus == '0' and parstatus != '2':
         # Unpack is disabled or was skipped due to nzb-file properties or due to errors during par-check
 
-        for dirpath, dirnames, filenames in ek.ek(os.walk, directory):
+        for dirpath, dirnames, filenames in Ek.ek(os.walk, directory):
             for file in filenames:
-                fileExtension = ek.ek(os.path.splitext, file)[1]
+                fileExtension = Ek.ek(os.path.splitext, file)[1]
 
                 if fileExtension in ['.par2']:
-                    logger.log("Post-Process: Unpack skipped and par-check skipped (although par2-files exist), setting status \"failed\"g")
+                    Logger.log("Post-Process: Unpack skipped and par-check skipped (although par2-files exist), setting status \"failed\"g")
                     status = 1
                     break
 
-        if ek.ek(os.path.isfile, ek.ek(os.path.join, directory, "_brokenlog.txt")) and not status == 1:
-            logger.log("Post-Process: _brokenlog.txt exists, download is probably damaged, exiting")
+        if Ek.ek(os.path.isfile, Ek.ek(os.path.join, directory, "_brokenlog.txt")) and not status == 1:
+            Logger.log("Post-Process: _brokenlog.txt exists, download is probably damaged, exiting")
             status = 1
 
         if not status == 1:
-            logger.log("Neither par2-files found, _brokenlog.txt doesn't exist, considering download successful")
+            Logger.log("Neither par2-files found, _brokenlog.txt doesn't exist, considering download successful")
 
     # Check if destination directory exists (important for reprocessing of history items)
-    if not ek.ek(os.path.isdir, directory):
-        logger.log("Post-Process: Nothing to post-process: destination directory %s doesn't exist" % directory)
+    if not Ek.ek(os.path.isdir, directory):
+        Logger.log("Post-Process: Nothing to post-process: destination directory %s doesn't exist" % directory)
         status = 1
 
     # All checks done, now launching the script.
@@ -244,13 +264,13 @@ if nzbget_version >= 11:
     videos = 0
     old_name = None
     new_name = None
-    base_name = ek.ek(os.path.basename, directory)
-    for dirpath, dirnames, filenames in ek.ek(os.walk, directory):
+    base_name = Ek.ek(os.path.basename, directory)
+    for dirpath, dirnames, filenames in Ek.ek(os.walk, directory):
         for file in filenames:
 
-            filePath = ek.ek(os.path.join, dirpath, file)
-            fileName, fileExtension = ek.ek(os.path.splitext, file)
-            dirname = ek.ek(os.path.dirname, filePath)
+            filePath = Ek.ek(os.path.join, dirpath, file)
+            fileName, fileExtension = Ek.ek(os.path.splitext, file)
+            dirname = Ek.ek(os.path.dirname, filePath)
 
             if reverse_pattern.search(fileName) is not None:
                 na_parts = season_pattern.search(fileName)
@@ -266,27 +286,27 @@ if nzbget_version >= 11:
                     new_filename = new_words[::-1] + na_parts.group(1)[::-1]
                 else:
                     new_filename = fileName[::-1]
-                logger.log("reversing filename from: %s to %s" % (fileName, new_filename))
+                Logger.log("reversing filename from: %s to %s" % (fileName, new_filename))
                 try:
-                    ek.ek(os.rename, filePath, ek.ek(os.path.join, dirpath, new_filename + fileExtension))
+                    Ek.ek(os.rename, filePath, Ek.ek(os.path.join, dirpath, new_filename + fileExtension))
                     rd = True
                 except Exception,e:
-                    logger.log(e, logger.ERROR)
-                    logger.log("Error: unable to rename file %s" % file, logger.ERROR)
+                    Logger.log(e, Logger.ERROR)
+                    Logger.log("Error: unable to rename file %s" % file, Logger.ERROR)
                     pass
             elif (fileExtension.lower() in media_extentions) and (garbage_name.search(fileName) is not None) and (media_pattern.search(base_name) is not None):
                 videos += 1
                 old_name = filePath
-                new_name = ek.ek(os.path.join, dirname, '%s%s' % (base_name, fileExtension))
+                new_name = Ek.ek(os.path.join, dirname, '%s%s' % (base_name, fileExtension))
 
     if not rd and videos == 1 and old_name is not None and new_name is not None:
-        logger.log("renaming the File %s  to the Dirname %s" % (ek.ek(os.path.basename, old_name), base_name))
+        Logger.log("renaming the File %s  to the Dirname %s" % (Ek.ek(os.path.basename, old_name), base_name))
         try:
-            ek.ek(os.rename, old_name, new_name)
+            Ek.ek(os.rename, old_name, new_name)
             rd = True
         except Exception,e:
-            logger.log(e, logger.ERROR)
-            logger.log("Error unable to rename file %s" % old_name, logger.ERROR)
+            Logger.log(e, Logger.ERROR)
+            Logger.log("Error unable to rename file %s" % old_name, Logger.ERROR)
             pass
 
     if rd:
@@ -295,5 +315,5 @@ if nzbget_version >= 11:
         sys.exit(POSTPROCESS_NONE)
 
 else:
-    logger.log("This script can only be called from NZBGet (11.0 or later).", logger.ERROR)
+    Logger.log("This script can only be called from NZBGet (11.0 or later).", Logger.ERROR)
     sys.exit(0)
