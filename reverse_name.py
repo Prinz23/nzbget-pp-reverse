@@ -33,21 +33,54 @@ media_list = [r"\.s\d{2}e\d{2}\.", r"\.2160p\.", r"\.1080[pi]\.", r"\.720p\.", r
 media_pattern = re.compile('|'.join(media_list), flags=re.IGNORECASE)
 media_extentions = [".mkv", ".mp4", ".avi", ".wmv", ".divx", ".xvid"]
 
-if 'nt' == os.name:
-    import ctypes
+PY2 = 2 == sys.version_info[0]
 
-    class WinEnv:
-        def __init__(self):
-            pass
+if not PY2:
+    string_types = str,
+    text_type = str
+
+    def iteritems(d, **kw):
+        return iter(d.items(**kw))
+else:
+    # noinspection PyUnresolvedReferences
+    string_types = basestring,
+    # noinspection PyUnresolvedReferences
+    text_type = unicode
+
+    def iteritems(d, **kw):
+        # noinspection PyCompatibility
+        return d.iteritems(**kw)
+
+
+class EnvVar(object):
+    def __init__(self):
+        pass
+
+    def __getitem__(self, key):
+        return os.environ[key]
+
+    @staticmethod
+    def get(key, default=None):
+        return os.environ.get(key, default)
+
+
+if not PY2:
+    env_var = EnvVar()
+
+elif 'nt' == os.name:
+    from ctypes import windll, create_unicode_buffer
+
+    # noinspection PyCompatibility
+    class WinEnvVar(EnvVar):
 
         @staticmethod
         def get_environment_variable(name):
-            name = unicode(name)  # ensures string argument is unicode
-            n = ctypes.windll.kernel32.GetEnvironmentVariableW(name, None, 0)
+            name = text_type(name)  # ensures string argument is unicode
+            n = windll.kernel32.GetEnvironmentVariableW(name, None, 0)
             env_value = None
             if n:
-                buf = ctypes.create_unicode_buffer(u'\0'*n)
-                ctypes.windll.kernel32.GetEnvironmentVariableW(name, buf, n)
+                buf = create_unicode_buffer(u'\0' * n)
+                windll.kernel32.GetEnvironmentVariableW(name, buf, n)
                 env_value = buf.value
             return env_value
 
@@ -56,26 +89,27 @@ if 'nt' == os.name:
 
         def get(self, key, default=None):
             r = self.get_environment_variable(key)
-            return r if r is not None else default
+            return r if None is not r else default
 
-    evn = WinEnv()
+    env_var = WinEnvVar()
 else:
-    class LinuxEnv(object):
+    class LinuxEnvVar(EnvVar):
+        # noinspection PyMissingConstructor
         def __init__(self, environ):
             self.environ = environ
 
         def __getitem__(self, key):
             v = self.environ.get(key)
             try:
-                return v.decode(SYS_ENCODING) if isinstance(v, str) else v
+                return v if not isinstance(v, str) else v.decode(SYS_ENCODING)
             except (UnicodeDecodeError, UnicodeEncodeError):
                 return v
 
         def get(self, key, default=None):
             v = self[key]
-            return v if v is not None else default
+            return v if None is not v else default
 
-    evn = LinuxEnv(os.environ)
+    env_var = LinuxEnvVar(os.environ)
 
 SYS_ENCODING = None
 
@@ -92,35 +126,44 @@ if not SYS_ENCODING or SYS_ENCODING in ('ANSI_X3.4-1968', 'US-ASCII', 'ASCII'):
     SYS_ENCODING = 'UTF-8'
 
 
-class Ek:
+# noinspection PyCompatibility
+class Ek(object):
     def __init__(self):
         pass
 
     @staticmethod
     def fix_string_encoding(x):
+        if not PY2:
+            return x
+
         if str == type(x):
             try:
                 return x.decode(SYS_ENCODING)
             except UnicodeDecodeError:
-                return None
-        elif unicode == type(x):
+                pass
+        elif text_type == type(x):
             return x
-        return None
 
     @staticmethod
     def fix_out_encoding(x):
-        if isinstance(x, basestring):
+        if PY2 and isinstance(x, string_types):
             return Ek.fix_string_encoding(x)
         return x
 
     @staticmethod
     def fix_list_encoding(x):
+        if not PY2:
+            return x
+
         if type(x) not in (list, tuple):
             return x
         return filter(lambda i: None is not i, map(Ek.fix_out_encoding, x))
 
     @staticmethod
     def encode_item(x):
+        if not PY2:
+            return x
+
         try:
             return x.encode(SYS_ENCODING)
         except UnicodeEncodeError:
@@ -128,20 +171,22 @@ class Ek:
 
     @staticmethod
     def win_encode_unicode(x):
-        if isinstance(x, str):
+        if PY2 and isinstance(x, str):
             try:
                 return x.decode('UTF-8')
             except UnicodeDecodeError:
-                return x
+                pass
         return x
 
     @staticmethod
     def ek(func, *args, **kwargs):
+        if not PY2:
+            return func(*args, **kwargs)
+
         if 'nt' == os.name:
             # convert all str parameter values to unicode
             args = tuple([x if not isinstance(x, str) else Ek.win_encode_unicode(x) for x in args])
-            kwargs = {k: x if not isinstance(x, str) else Ek.win_encode_unicode(x) for k, x in
-                      kwargs.iteritems()}
+            kwargs = {k: x if not isinstance(x, str) else Ek.win_encode_unicode(x) for k, x in iteritems(kwargs)}
             func_result = func(*args, **kwargs)
         else:
             func_result = func(*[Ek.encode_item(x) if type(x) == str else x for x in args], **kwargs)
@@ -153,7 +198,41 @@ class Ek:
         return func_result
 
 
-class Logger:
+def ex(exc):
+    """Returns a unicode string from the exception text if it exists"""
+
+    if not PY2:
+        return str(exc)
+
+    e_message = u''
+
+    if not exc or not exc.args:
+        return e_message
+
+    for arg in exc.args:
+
+        if None is not arg:
+            if isinstance(arg, (str, text_type)):
+                fixed_arg = Ek.fix_string_encoding(arg)
+
+            else:
+                try:
+                    fixed_arg = u'error ' + Ek.fix_string_encoding(str(arg))
+
+                except (BaseException, Exception):
+                    fixed_arg = None
+
+            if fixed_arg:
+                if not e_message:
+                    e_message = fixed_arg
+
+                else:
+                    e_message = e_message + ' : ' + fixed_arg
+
+    return e_message
+
+
+class Logger(object):
     INFO, DETAIL, ERROR, WARNING = 'INFO', 'DETAIL', 'ERROR', 'WARNING'
     # '[NZB]' send a command message to NZBGet (no log)
     NZB = 'NZB'
@@ -163,16 +242,19 @@ class Logger:
 
     @staticmethod
     def safe_print(msg_type, message):
-        try:
-            print '[%s] %s' % (msg_type, message.encode(SYS_ENCODING))
-        except (StandardError, Exception):
+        if not PY2:
+            print('[%s] %s' % (msg_type, message))
+        else:
             try:
-                print '[%s] %s' % (msg_type, message)
-            except (StandardError, Exception):
+                print('[%s] %s' % (msg_type, message.encode(SYS_ENCODING)))
+            except (BaseException, Exception):
                 try:
-                    print '[%s] %s' % (msg_type, repr(message))
-                except (StandardError, Exception):
-                    pass
+                    print('[%s] %s' % (msg_type, message))
+                except (BaseException, Exception):
+                    try:
+                        print('[%s] %s' % (msg_type, repr(message)))
+                    except (BaseException, Exception):
+                        pass
 
     @staticmethod
     def log(message, msg_type=INFO):
@@ -180,7 +262,7 @@ class Logger:
         if size > len(message):
             Logger.safe_print(msg_type, message)
         else:
-            for group in (message[pos:pos + size] for pos in xrange(0, len(message), size)):
+            for group in [message[pos:pos + size] for pos in range(0, len(message), size)]:
                 Logger.safe_print(msg_type, group)
 
 
@@ -192,7 +274,7 @@ def tryInt(s, s_default=0):
 
 # NZBGet V11+
 # Check if the script is called from nzbget 11.0 or later
-nzbget_version = evn.get('NZBOP_VERSION', '0.1')
+nzbget_version = env_var.get('NZBOP_VERSION', '0.1')
 nzbget_version = tryInt(nzbget_version[:nzbget_version.find(".")])
 if nzbget_version >= 11:
     Logger.log("Script triggered from NZBGet (11.0 or later).")
@@ -208,11 +290,11 @@ if nzbget_version >= 11:
     # Check nzbget.conf options
     status = 0
 
-    if evn['NZBOP_UNPACK'] != 'yes':
+    if env_var['NZBOP_UNPACK'] != 'yes':
         Logger.log("Please enable option \"Unpack\" in nzbget configuration file, exiting")
         sys.exit(POSTPROCESS_NONE)
 
-    parstatus = evn['NZBPP_PARSTATUS']
+    parstatus = env_var['NZBPP_PARSTATUS']
 
     # Check par status
     if parstatus == '3':
@@ -224,7 +306,7 @@ if nzbget_version >= 11:
         status = 1
         sys.exit(POSTPROCESS_NONE)
 
-    unpackstatus = evn['NZBPP_UNPACKSTATUS']
+    unpackstatus = env_var['NZBPP_UNPACKSTATUS']
 
     # Check unpack status
     if unpackstatus == '1':
@@ -232,7 +314,7 @@ if nzbget_version >= 11:
         status = 1
         sys.exit(POSTPROCESS_NONE)
 
-    directory = evn['NZBPP_DIRECTORY']
+    directory = env_var['NZBPP_DIRECTORY']
 
     if unpackstatus == '0' and parstatus != '2':
         # Unpack is disabled or was skipped due to nzb-file properties or due to errors during par-check
@@ -290,8 +372,8 @@ if nzbget_version >= 11:
                 try:
                     Ek.ek(os.rename, filePath, Ek.ek(os.path.join, dirpath, new_filename + fileExtension))
                     rd = True
-                except Exception,e:
-                    Logger.log(e, Logger.ERROR)
+                except Exception as e:
+                    Logger.log(ex(e), Logger.ERROR)
                     Logger.log("Error: unable to rename file %s" % file, Logger.ERROR)
                     pass
             elif (fileExtension.lower() in media_extentions) and (garbage_name.search(fileName) is not None) and (media_pattern.search(base_name) is not None):
@@ -304,8 +386,8 @@ if nzbget_version >= 11:
         try:
             Ek.ek(os.rename, old_name, new_name)
             rd = True
-        except Exception,e:
-            Logger.log(e, Logger.ERROR)
+        except Exception as e:
+            Logger.log(ex(e), Logger.ERROR)
             Logger.log("Error unable to rename file %s" % old_name, Logger.ERROR)
             pass
 
